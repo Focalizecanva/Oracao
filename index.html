@@ -135,7 +135,8 @@
     <div class="row">
       <label>Minha oração</label>
       <textarea id="custom" placeholder="Digite sua oração aqui.&#10;A primeira linha vira o título."></textarea>
-      <button class="primary" id="saveCustom">Salvar oração</button>
+      <p class="hint" id="saveState" style="margin:6px 0 0">✓ Salvo automaticamente</p>
+      <button class="primary" id="saveCustom">Pronto</button>
     </div>
     <div class="row">
       <label>Primeira música</label>
@@ -179,7 +180,7 @@
       <input type="checkbox" id="loop" style="width:22px;height:22px;accent-color:var(--gold)">
     </div>
     <p class="hint">Para instalar: no Android (Chrome), toque em ⋮ › “Adicionar à tela inicial”. No iPhone (Safari), toque em Compartilhar › “Adicionar à Tela de Início”.<br>Toque na tela durante a oração para mostrar ou esconder os controles.</p>
-    <p class="hint" style="text-align:center;opacity:.7">Versão 6</p>
+    <p class="hint" style="text-align:center;opacity:.7">Versão 7</p>
     <button class="primary" id="closeSheet" style="background:transparent;color:var(--gold);border:1px solid var(--line)">Fechar</button>
   </div>
 </div>
@@ -458,7 +459,21 @@ function showTrack(i, name){
   (async()=>{ try{ const t=await trackDB.get(TRACK_KEYS[i]); if(t&&t.blob){ audio.setTrack(i,t.blob); showTrack(i,t.name); } }catch(e){} })();
 });
 $("#phrase2").value = state.phrase2;
-$("#custom").addEventListener("input",()=>{ const p=state.phrase2; if(p.trim()) render(); });
+// a oração se salva sozinha enquanto você digita
+let saveT=null;
+function saveDraft(){
+  clearTimeout(saveT);
+  const v=$("#custom").value.trim();
+  if(v!==state.custom){ state.custom=v; store.set("custom",v); render(); }
+  const ok=$("#saveState"); if(ok){ ok.textContent="✓ Salvo automaticamente"; }
+}
+$("#custom").addEventListener("input",()=>{
+  const ok=$("#saveState"); if(ok) ok.textContent="Salvando…";
+  clearTimeout(saveT); saveT=setTimeout(saveDraft,600);
+});
+$("#custom").addEventListener("blur",saveDraft);
+window.addEventListener("pagehide",()=>{ if($("#sheet").classList.contains("open")) saveDraft(); });
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="hidden" && $("#sheet").classList.contains("open")) saveDraft(); });
 $("#phrase2").addEventListener("input", e=>{ state.phrase2=e.target.value; store.set("phrase2",state.phrase2); render(); });
 
 /* ---------- Ajustes ---------- */
@@ -480,8 +495,9 @@ function openSheet(){
   $("#sheet").classList.add("open");
 }
 $("#settingsBtn").addEventListener("click",e=>{e.stopPropagation();openSheet();});
-$("#closeSheet").onclick=()=>$("#sheet").classList.remove("open");
-$("#sheet").addEventListener("click",e=>{ if(e.target.id==="sheet") $("#sheet").classList.remove("open"); });
+function closeSheet(){ saveDraft(); $("#sheet").classList.remove("open"); }
+$("#closeSheet").onclick=closeSheet;
+$("#sheet").addEventListener("click",e=>{ if(e.target.id==="sheet") closeSheet(); });
 $("#size").addEventListener("input",e=>{state.size=+e.target.value;store.set("size",state.size);applySize();});
 $("#vol").addEventListener("input",e=>{state.vol=+e.target.value;store.set("vol",state.vol);audio.setVol();});
 $("#loop").addEventListener("change",e=>{state.loop=e.target.checked;store.set("loop",state.loop);});
@@ -502,6 +518,8 @@ function applyFont(){
 function applySize(){document.documentElement.style.setProperty("--size",state.size+"px");requestAnimationFrame(updateTime)}
 
 applyFont(); applySize(); paintMusicBtn(); render();
+// pede ao celular para não apagar a oração e as músicas guardadas
+try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{}); }catch(e){}
 try{document.fonts.ready.then(updateTime)}catch(e){}
 if(!state.custom) setTimeout(openSheet, 400);
 
