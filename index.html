@@ -179,6 +179,7 @@
       <input type="checkbox" id="loop" style="width:22px;height:22px;accent-color:var(--gold)">
     </div>
     <p class="hint">Para instalar: no Android (Chrome), toque em ⋮ › “Adicionar à tela inicial”. No iPhone (Safari), toque em Compartilhar › “Adicionar à Tela de Início”.<br>Toque na tela durante a oração para mostrar ou esconder os controles.</p>
+    <p class="hint" style="text-align:center;opacity:.7">Versão 5</p>
     <button class="primary" id="closeSheet" style="background:transparent;color:var(--gold);border:1px solid var(--line)">Fechar</button>
   </div>
 </div>
@@ -504,7 +505,15 @@ try{document.fonts.ready.then(updateTime)}catch(e){}
 if(!state.custom) setTimeout(openSheet, 400);
 
 /* ---------- Instalável / funciona offline ---------- */
-if("serviceWorker" in navigator){ window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{})); }
+if("serviceWorker" in navigator){
+  const hadController = !!navigator.serviceWorker.controller; let reloaded=false;
+  // quando chega uma versão nova, recarrega uma vez sozinho
+  navigator.serviceWorker.addEventListener("controllerchange",()=>{ if(hadController && !reloaded){ reloaded=true; location.reload(); } });
+  window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(r=>{
+    r.update().catch(()=>{});
+    document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") r.update().catch(()=>{}); });
+  }).catch(()=>{}));
+}
 </script>
 </body>
 </html>
