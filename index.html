@@ -86,6 +86,7 @@
   .switch{display:flex;align-items:center;justify-content:space-between;gap:12px}
   .primary{width:100%;padding:14px;border-radius:14px;border:none;background:var(--gold);color:#1d1428;
     font:500 16px Inter,sans-serif;cursor:pointer;margin-top:6px}
+  .field{width:100%;margin-top:8px;background:#120d1f;color:var(--text);border:1px solid var(--line);border-radius:14px;padding:12px;font:16px Inter,sans-serif}
   .filebox{display:flex;align-items:center;gap:8px;background:#120d1f;border:1px solid var(--line);
     border-radius:14px;padding:8px 8px 8px 12px}
   #trackName{flex:1;min-width:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
@@ -137,14 +138,25 @@
       <button class="primary" id="saveCustom">Salvar oração</button>
     </div>
     <div class="row">
-      <label>Minha música</label>
+      <label>Primeira música</label>
       <div class="filebox">
         <span id="trackName">Nenhuma música escolhida</span>
         <label class="chip" for="trackFile" style="margin:0">Escolher</label>
         <button class="chip" id="trackRemove" style="display:none">Remover</button>
       </div>
       <input type="file" id="trackFile" accept="audio/*" hidden>
-      <p class="hint" style="margin:8px 0 0">MP3, M4A, WAV… A música fica guardada só neste aparelho e toca em repetição.</p>
+      <p class="hint" style="margin:8px 0 0">MP3, M4A, WAV… As músicas ficam guardadas só neste aparelho e tocam em repetição.</p>
+    </div>
+    <div class="row">
+      <label>Segunda música (opcional)</label>
+      <div class="filebox">
+        <span id="trackName2">Nenhuma música escolhida</span>
+        <label class="chip" for="trackFile2" style="margin:0">Escolher</label>
+        <button class="chip" id="trackRemove2" style="display:none">Remover</button>
+      </div>
+      <input type="file" id="trackFile2" accept="audio/*" hidden>
+      <input type="text" id="phrase2" class="field" placeholder="Começa na frase… ex: São Miguel à frente" autocomplete="off">
+      <p class="hint" id="phraseHint" style="margin:8px 0 0"></p>
     </div>
     <div class="row">
       <label>Letra</label>
@@ -184,12 +196,18 @@ let state = {
   vol: store.get("vol",70),
   mood: store.get("mood","sereno"),
   font: store.get("font","clara"),
+  phrase2: store.get("phrase2",""),
   loop: store.get("loop",false),
   music: store.get("music",true)
 };
 const $ = s => document.querySelector(s);
 const stage=$("#stage"), textEl=$("#text");
 
+function norm(s){return (s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim()}
+function whichTrack(){
+  const m=document.getElementById("mark2"); if(!m) return 0;
+  return m.getBoundingClientRect().top < stage.clientHeight*0.55 ? 1 : 0;
+}
 function esc(s){return s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}
 function render(){
   if(!state.custom){
@@ -197,9 +215,19 @@ function render(){
   } else {
     const lines = state.custom.trim().split("\n");
     const title = lines.shift();
-    let body = esc(lines.join("\n").trim());
+    const key=norm(state.phrase2); let found=false;
+    let body = lines.join("\n").trim().split("\n").map(l=>{
+      if(key && !found && norm(l).includes(key)){ found=true; return '<span id="mark2">'+esc(l)+'</span>'; }
+      return esc(l);
+    }).join("\n");
     body = body.replace(/(Amém[.!]?)\s*$/i,'<div class="amen">$1</div>');
     textEl.innerHTML = `<h1>${esc(title)}</h1>${body}`;
+  }
+  const h=$("#phraseHint");
+  if(h){
+    if(!state.phrase2.trim()) h.textContent="Escreva um trecho da frase onde a segunda música deve começar.";
+    else if((($("#custom")&&$("#custom").value)||state.custom).split("\n").some(l=>norm(l).includes(norm(state.phrase2)))) h.textContent="✓ Frase encontrada na sua oração.";
+    else h.textContent="Não encontrei essa frase na oração. Confira se está escrita igual (acentos não importam).";
   }
   stage.scrollTop = 0; pos = 0; updateProgress();
 }
@@ -216,6 +244,7 @@ function tick(t){
     else { pos=maxScroll(); stage.scrollTop=pos; finish(); return; }
   }
   stage.scrollTop = pos; updateProgress();
+  if(state.music) audio.want(whichTrack());
   raf = requestAnimationFrame(tick);
 }
 function fmt(sec){sec=Math.max(0,Math.round(sec));const m=Math.floor(sec/60),s=sec%60;return m+":"+String(s).padStart(2,"0")}
@@ -236,7 +265,7 @@ async function start(){
   if(!state.custom){ openSheet(); pendingStart=false; return; }
   if(pos >= maxScroll()-2){ pos=0; stage.scrollTop=0; }
   setPlayIcon(true);
-  if(state.music) audio.start(pos<5);
+  if(state.music) audio.start(pos<5, whichTrack());
   requestWake();
   if(pos < 5){
     const c=$("#count"); c.style.display="grid";
@@ -273,28 +302,30 @@ async function requestWake(){try{ if("wakeLock" in navigator) wake=await navigat
 function releaseWake(){try{ wake&&wake.release(); wake=null; }catch(e){}}
 document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible" && playing) requestWake(); });
 
-/* ---------- Guardar a música no aparelho (IndexedDB) ---------- */
+/* ---------- Guardar as músicas no aparelho (IndexedDB) ---------- */
 const trackDB = {
   open(){ return new Promise((res,rej)=>{ const r=indexedDB.open("oracao",1);
     r.onupgradeneeded=()=>r.result.createObjectStore("files"); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); },
-  async put(blob,name){ const db=await this.open(); return new Promise((res,rej)=>{
-    const tx=db.transaction("files","readwrite"); tx.objectStore("files").put({blob,name},"track");
+  async put(key,blob,name){ const db=await this.open(); return new Promise((res,rej)=>{
+    const tx=db.transaction("files","readwrite"); tx.objectStore("files").put({blob,name},key);
     tx.oncomplete=res; tx.onerror=()=>rej(tx.error); }); },
-  async get(){ const db=await this.open(); return new Promise((res,rej)=>{
-    const r=db.transaction("files").objectStore("files").get("track"); r.onsuccess=()=>res(r.result||null); r.onerror=()=>rej(r.error); }); },
-  async del(){ const db=await this.open(); return new Promise(res=>{
-    const tx=db.transaction("files","readwrite"); tx.objectStore("files").delete("track"); tx.oncomplete=res; tx.onerror=res; }); }
+  async get(key){ const db=await this.open(); return new Promise((res,rej)=>{
+    const r=db.transaction("files").objectStore("files").get(key); r.onsuccess=()=>res(r.result||null); r.onerror=()=>rej(r.error); }); },
+  async del(key){ const db=await this.open(); return new Promise(res=>{
+    const tx=db.transaction("files","readwrite"); tx.objectStore("files").delete(key); tx.oncomplete=res; tx.onerror=res; }); }
 };
+const TRACK_KEYS=["track","track2"];
 
-/* ---------- Áudio: sua música, ou som ambiente gerado ---------- */
+/* ---------- Áudio: suas músicas, ou som ambiente gerado ---------- */
 const MOODS = {
   sereno:  {name:"Sereno",  chords:[[48,55,64,71],[45,52,60,67],[41,48,57,64],[43,50,59,62]], dur:7, wave:"sine"},
   celeste: {name:"Celeste", chords:[[50,57,66,73],[47,54,62,69],[43,50,59,66],[45,52,61,64]], dur:9, wave:"triangle"},
   orgao:   {name:"Órgão suave", chords:[[43,50,59,67],[48,55,64,67],[45,52,60,69],[50,57,62,66]], dur:6, wave:"square"}
 };
 const audio = (()=>{
-  let ctx=null, master=null, filt=null, timer=null, idx=0, on=false;
-  let el=null, elNode=null, trackURL=null, stopT=null;
+  let ctx=null, master=null, filt=null, synthGain=null, timer=null, idx=0, synthOn=false, on=false, cur=0;
+  const slots=[{el:null,node:null,gain:null,url:null,t:null},{el:null,node:null,gain:null,url:null,t:null}];
+  let synthT=null;
   const mtof=m=>440*Math.pow(2,(m-69)/12);
   function impulse(sec){
     const len=ctx.sampleRate*sec, b=ctx.createBuffer(2,len,ctx.sampleRate);
@@ -305,22 +336,22 @@ const audio = (()=>{
     if(ctx) return;
     ctx=new (window.AudioContext||window.webkitAudioContext)();
     master=ctx.createGain(); master.gain.value=0; master.connect(ctx.destination);
+    synthGain=ctx.createGain(); synthGain.gain.value=0; synthGain.connect(master);
     filt=ctx.createBiquadFilter(); filt.type="lowpass"; filt.frequency.value=1400; filt.Q.value=.4;
     const rev=ctx.createConvolver(); rev.buffer=impulse(5);
     const dry=ctx.createGain(); dry.gain.value=.45;
     const wet=ctx.createGain(); wet.gain.value=.75;
-    filt.connect(dry).connect(master); filt.connect(rev).connect(wet).connect(master);
+    filt.connect(dry).connect(synthGain); filt.connect(rev).connect(wet).connect(synthGain);
+    slots.forEach(s=>{ s.gain=ctx.createGain(); s.gain.gain.value=0; s.gain.connect(master); });
   }
-  function hookTrack(){
+  function hook(s){
     // passa a música pelo controle de volume (funciona também no iPhone)
-    if(el && !elNode){ try{ elNode=ctx.createMediaElementSource(el); elNode.connect(master); }catch(e){} }
+    if(s.el && !s.node){ try{ s.node=ctx.createMediaElementSource(s.el); s.node.connect(s.gain); }catch(e){} }
   }
-  const hasTrack=()=>!!el;
-  function level(){ const v=state.vol/100; return hasTrack()? v : v*0.22; }
-  function ramp(to,sec){
-    const t=ctx.currentTime; master.gain.cancelScheduledValues(t);
-    master.gain.setValueAtTime(master.gain.value,t); master.gain.linearRampToValueAtTime(to,t+sec);
-  }
+  function rampP(p,to,sec){ const t=ctx.currentTime; p.cancelScheduledValues(t); p.setValueAtTime(p.value,t); p.linearRampToValueAtTime(to,t+sec); }
+  // qual fonte toca: 1 só se existir a segunda música; senão 0 (primeira música ou som ambiente)
+  const effective=w=> (w===1 && slots[1].el) ? 1 : 0;
+  const usesSynth=i=> i===0 && !slots[0].el;
   function playChord(){
     const m=MOODS[state.mood]||MOODS.sereno, notes=m.chords[idx++%m.chords.length];
     const t=ctx.currentTime, d=m.dur, att=d*0.4, rel=d*0.7;
@@ -337,38 +368,60 @@ const audio = (()=>{
     });
     timer=setTimeout(playChord, d*1000);
   }
-  function halt(){ clearTimeout(timer); clearTimeout(stopT); }
+  function playSrc(i, fromStart, fade){
+    if(usesSynth(i)){
+      clearTimeout(synthT);
+      if(!synthOn){ synthOn=true; idx=0; playChord(); }
+      rampP(synthGain.gain, 0.22, fade);
+    } else {
+      const s=slots[i]; clearTimeout(s.t); hook(s);
+      if(fromStart){ try{ s.el.currentTime=0; }catch(e){} }
+      const p=s.el.play(); if(p&&p.catch) p.catch(()=>{});
+      rampP(s.gain.gain, 1, fade);
+    }
+  }
+  function stopSrc(i, sec){
+    if(usesSynth(i)){
+      rampP(synthGain.gain, 0, sec); clearTimeout(synthT);
+      synthT=setTimeout(()=>{ clearTimeout(timer); synthOn=false; }, sec*1000+100);
+    } else {
+      const s=slots[i]; if(!s.el) return; rampP(s.gain.gain, 0, sec); clearTimeout(s.t);
+      s.t=setTimeout(()=>{ try{s.el.pause()}catch(e){} }, sec*1000+100);
+    }
+  }
   return {
-    setTrack(blob){
+    setTrack(i, blob){
       this.stop(true);
-      if(el){ try{el.pause()}catch(e){} }
-      if(trackURL) URL.revokeObjectURL(trackURL);
-      el=null; elNode=null; trackURL=null;
+      const s=slots[i];
+      if(s.el){ try{s.el.pause()}catch(e){} }
+      if(s.url) URL.revokeObjectURL(s.url);
+      s.el=null; s.node=null; s.url=null;
       if(!blob) return;
-      trackURL=URL.createObjectURL(blob);
-      el=new Audio(); el.src=trackURL; el.loop=true; el.preload="auto"; el.setAttribute("playsinline","");
+      s.url=URL.createObjectURL(blob);
+      s.el=new Audio(); s.el.src=s.url; s.el.loop=true; s.el.preload="auto"; s.el.setAttribute("playsinline","");
     },
-    start(fromTop){
+    start(fromTop, which){
       try{ init(); ctx.resume(); }catch(e){ return; }
-      clearTimeout(stopT);
-      if(hasTrack()){
-        hookTrack();
-        if(fromTop && !on){ try{ el.currentTime=0; }catch(e){} }
-        const p=el.play(); if(p&&p.catch) p.catch(()=>{});
-      } else if(!on){ idx=0; playChord(); }
-      on=true; ramp(level(), hasTrack()?2:4);
+      cur=effective(which);
+      playSrc(cur, fromTop, usesSynth(cur)?4:2);
+      on=true; rampP(master.gain, state.vol/100, .3);
+    },
+    // chamado durante a rolagem: troca de música com transição suave
+    want(which){
+      if(!ctx||!on) return;
+      const e=effective(which); if(e===cur) return;
+      stopSrc(cur, 3); playSrc(e, true, 3); cur=e;
     },
     stop(now){
-      if(!ctx||!on) return; on=false; halt();
-      ramp(0, now?0.05:1.2);
-      stopT=setTimeout(()=>{ if(el) try{el.pause()}catch(e){} }, now?60:1300);
+      if(!ctx||!on) return; on=false;
+      [0,1].forEach(i=>stopSrc(i, now?0.05:1.2));
     },
     fadeOut(s){
-      if(!ctx||!on) return; on=false; halt(); ramp(0,s);
-      stopT=setTimeout(()=>{ if(el) try{el.pause()}catch(e){} }, s*1000+100);
+      if(!ctx||!on) return; on=false;
+      [0,1].forEach(i=>stopSrc(i, s));
     },
-    setVol(){ if(ctx&&on) ramp(level(),.3); },
-    hasTrack
+    setVol(){ if(ctx&&on) rampP(master.gain, state.vol/100, .3); },
+    has:i=>!!slots[i].el
   };
 })();
 
@@ -376,28 +429,35 @@ function paintMusicBtn(){ $("#musicBtn").style.opacity = state.music?1:.4; }
 $("#musicBtn").addEventListener("click",e=>{
   e.stopPropagation();
   state.music=!state.music; store.set("music",state.music); paintMusicBtn();
-  if(state.music){ if(playing||pendingStart) audio.start(false); } else audio.stop();
+  if(state.music){ if(playing||pendingStart) audio.start(false, whichTrack()); } else audio.stop();
 });
 
-/* ---------- Escolher música ---------- */
-function showTrack(name){
-  $("#trackName").textContent = name || "Nenhuma música escolhida";
-  $("#trackName").style.color = name ? "var(--text)" : "var(--muted)";
-  $("#trackRemove").style.display = name ? "" : "none";
-  $("#moodRow").style.display = name ? "none" : "";
+/* ---------- Escolher músicas ---------- */
+function showTrack(i, name){
+  const n=i?"2":"";
+  $("#trackName"+n).textContent = name || "Nenhuma música escolhida";
+  $("#trackName"+n).style.color = name ? "var(--text)" : "var(--muted)";
+  $("#trackRemove"+n).style.display = name ? "" : "none";
+  if(i===0) $("#moodRow").style.display = name ? "none" : "";
 }
-$("#trackFile").addEventListener("change", async e=>{
-  const f=e.target.files && e.target.files[0]; if(!f) return;
-  audio.setTrack(f); showTrack(f.name);
-  try{ await trackDB.put(f, f.name); }
-  catch(err){ $("#trackName").textContent = f.name+" (não foi possível guardar; escolha de novo na próxima vez)"; }
-  e.target.value="";
+[0,1].forEach(i=>{
+  const n=i?"2":"";
+  $("#trackFile"+n).addEventListener("change", async e=>{
+    const f=e.target.files && e.target.files[0]; if(!f) return;
+    audio.setTrack(i,f); showTrack(i,f.name);
+    try{ await trackDB.put(TRACK_KEYS[i], f, f.name); }
+    catch(err){ $("#trackName"+n).textContent = f.name+" (não foi possível guardar; escolha de novo na próxima vez)"; }
+    e.target.value="";
+  });
+  $("#trackRemove"+n).addEventListener("click", async ()=>{
+    audio.setTrack(i,null); showTrack(i,null);
+    try{ await trackDB.del(TRACK_KEYS[i]); }catch(e){}
+  });
+  (async()=>{ try{ const t=await trackDB.get(TRACK_KEYS[i]); if(t&&t.blob){ audio.setTrack(i,t.blob); showTrack(i,t.name); } }catch(e){} })();
 });
-$("#trackRemove").addEventListener("click", async ()=>{
-  audio.setTrack(null); showTrack(null);
-  try{ await trackDB.del(); }catch(e){}
-});
-(async()=>{ try{ const t=await trackDB.get(); if(t&&t.blob){ audio.setTrack(t.blob); showTrack(t.name); } }catch(e){} })();
+$("#phrase2").value = state.phrase2;
+$("#custom").addEventListener("input",()=>{ const p=state.phrase2; if(p.trim()) render(); });
+$("#phrase2").addEventListener("input", e=>{ state.phrase2=e.target.value; store.set("phrase2",state.phrase2); render(); });
 
 /* ---------- Ajustes ---------- */
 function chips(el, items, current, onPick){
