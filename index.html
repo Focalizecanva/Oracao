@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#120d1f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Oração">
+<title>Oração</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg1:#120d1f; --bg2:#2a1b3d; --gold:#e8c88a; --text:#f4ede1; --muted:#b7a9c9;
+    --panel:rgba(20,14,32,.82); --line:rgba(232,200,138,.22);
+    --size:30px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;overflow:hidden;background:var(--bg1);color:var(--text);
+    font-family:Inter,system-ui,sans-serif}
+  body{background:radial-gradient(120% 80% at 50% 0%, #3b2752 0%, var(--bg2) 35%, var(--bg1) 80%)}
+  .glow{position:fixed;inset:0;pointer-events:none;
+    background:radial-gradient(40% 30% at 50% 18%, rgba(232,200,138,.18), transparent 70%);
+    animation:breathe 9s ease-in-out infinite}
+  @keyframes breathe{50%{opacity:.45}}
+
+  #stage{position:fixed;inset:0;overflow-y:auto;scrollbar-width:none;
+    -webkit-mask-image:linear-gradient(transparent 0, #000 22%, #000 70%, transparent 100%);
+            mask-image:linear-gradient(transparent 0, #000 22%, #000 70%, transparent 100%)}
+  #stage::-webkit-scrollbar{display:none}
+  #text{max-width:720px;margin:0 auto;padding:55vh 28px 75vh;
+    font-family:"Cormorant Garamond",Georgia,serif;font-size:var(--size);line-height:1.55;
+    text-align:center;white-space:pre-wrap}
+  #text h1{font-weight:500;font-size:1.25em;color:var(--gold);letter-spacing:.02em;margin:0 0 1.2em}
+  #text .amen{color:var(--gold);font-style:italic;margin-top:1.4em}
+
+  /* top bar */
+  header{position:fixed;top:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;
+    padding:calc(env(safe-area-inset-top) + 12px) 16px 12px;z-index:5;transition:opacity .6s}
+  .brand{font-family:"Cormorant Garamond",serif;font-size:22px;color:var(--gold);letter-spacing:.05em}
+  .icon-btn{background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--text);
+    width:42px;height:42px;border-radius:50%;display:grid;place-items:center;cursor:pointer}
+  .icon-btn svg{width:20px;height:20px}
+
+  /* bottom controls */
+  footer{position:fixed;left:0;right:0;bottom:0;z-index:5;
+    padding:14px 16px calc(env(safe-area-inset-bottom) + 16px);transition:opacity .6s, transform .6s}
+  .bar{max-width:520px;margin:0 auto;background:var(--panel);border:1px solid var(--line);
+    border-radius:22px;padding:12px 14px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    display:flex;align-items:center;gap:12px}
+  #play{width:56px;height:56px;flex:none;border-radius:50%;border:none;cursor:pointer;
+    background:linear-gradient(145deg,#f1d69e,#c9a35d);color:#1d1428;display:grid;place-items:center;
+    box-shadow:0 6px 24px rgba(232,200,138,.35)}
+  #play svg{width:24px;height:24px}
+  .grow{flex:1;min-width:0}
+  .lbl{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:6px}
+  input[type=range]{width:100%;accent-color:var(--gold)}
+  #progress{height:3px;background:rgba(255,255,255,.08);border-radius:3px;margin-top:10px;overflow:hidden}
+  #progress i{display:block;height:100%;width:0;background:var(--gold)}
+  .hide-ui header,.hide-ui footer{opacity:0;pointer-events:none}
+  .hide-ui footer{transform:translateY(20px)}
+
+  /* sheet */
+  #sheet{position:fixed;inset:0;z-index:10;display:none;align-items:flex-end;justify-content:center;
+    background:rgba(0,0,0,.5)}
+  #sheet.open{display:flex}
+  .card{width:100%;max-width:560px;max-height:88vh;overflow:auto;background:#1b1329;border:1px solid var(--line);
+    border-radius:24px 24px 0 0;padding:20px 20px calc(env(safe-area-inset-bottom) + 20px)}
+  .card h2{font-family:"Cormorant Garamond",serif;font-weight:500;color:var(--gold);margin:0 0 14px;font-size:26px}
+  .row{margin:16px 0}
+  .row > label{display:block;font-size:13px;color:var(--muted);margin-bottom:8px}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{padding:9px 14px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--text);
+    font:inherit;font-size:14px;cursor:pointer}
+  .chip.on{background:var(--gold);color:#1d1428;border-color:var(--gold)}
+  textarea{width:100%;min-height:180px;background:#120d1f;color:var(--text);border:1px solid var(--line);
+    border-radius:14px;padding:12px;font:16px/1.5 Inter,sans-serif;resize:vertical}
+  .switch{display:flex;align-items:center;justify-content:space-between;gap:12px}
+  .primary{width:100%;padding:14px;border-radius:14px;border:none;background:var(--gold);color:#1d1428;
+    font:500 16px Inter,sans-serif;cursor:pointer;margin-top:6px}
+  .filebox{display:flex;align-items:center;gap:8px;background:#120d1f;border:1px solid var(--line);
+    border-radius:14px;padding:8px 8px 8px 12px}
+  #trackName{flex:1;min-width:0;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+  .hint{font-size:12px;color:var(--muted);line-height:1.5}
+
+  #count{position:fixed;inset:0;display:none;place-items:center;z-index:8;pointer-events:none;
+    font-family:"Cormorant Garamond",serif;font-size:120px;color:var(--gold)}
+</style>
+</head>
+<body>
+<div class="glow"></div>
+
+<header>
+  <div class="brand">✦ Oração</div>
+  <div style="display:flex;gap:8px">
+    <button class="icon-btn" id="musicBtn" aria-label="Música">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+    </button>
+    <button class="icon-btn" id="settingsBtn" aria-label="Ajustes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2" fill="#1b1329"/><circle cx="15" cy="12" r="2" fill="#1b1329"/><circle cx="7" cy="18" r="2" fill="#1b1329"/></svg>
+    </button>
+  </div>
+</header>
+
+<div id="stage"><div id="text"></div></div>
+<div id="count"></div>
+
+<footer>
+  <div class="bar">
+    <button id="play" aria-label="Iniciar">
+      <svg id="icoPlay" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+      <svg id="icoPause" viewBox="0 0 24 24" fill="currentColor" style="display:none"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>
+    </button>
+    <div class="grow">
+      <div class="lbl"><span>Velocidade</span><span id="speedVal">Calma</span></div>
+      <input type="range" id="speed" min="8" max="80" value="28">
+      <div id="progress"><i></i></div>
+    </div>
+  </div>
+</footer>
+
+<div id="sheet">
+  <div class="card">
+    <h2>Ajustes</h2>
+    <div class="row">
+      <label>Minha oração</label>
+      <textarea id="custom" placeholder="Digite sua oração aqui.&#10;A primeira linha vira o título."></textarea>
+      <button class="primary" id="saveCustom">Salvar oração</button>
+    </div>
+    <div class="row">
+      <label>Minha música</label>
+      <div class="filebox">
+        <span id="trackName">Nenhuma música escolhida</span>
+        <label class="chip" for="trackFile" style="margin:0">Escolher</label>
+        <button class="chip" id="trackRemove" style="display:none">Remover</button>
+      </div>
+      <input type="file" id="trackFile" accept="audio/*" hidden>
+      <p class="hint" style="margin:8px 0 0">MP3, M4A, WAV… A música fica guardada só neste aparelho e toca em repetição.</p>
+    </div>
+    <div class="row">
+      <label>Tamanho do texto</label>
+      <input type="range" id="size" min="20" max="48" value="30">
+    </div>
+    <div class="row switch">
+      <label style="margin:0">Volume da música</label>
+      <input type="range" id="vol" min="0" max="100" value="55" style="max-width:55%">
+    </div>
+    <div class="row" id="moodRow">
+      <label>Som ambiente (usado enquanto você não escolher uma música)</label>
+      <div class="chips" id="moodChips"></div>
+    </div>
+    <div class="row switch">
+      <label style="margin:0">Repetir ao terminar</label>
+      <input type="checkbox" id="loop" style="width:22px;height:22px;accent-color:var(--gold)">
+    </div>
+    <p class="hint">Para instalar: no Android (Chrome), toque em ⋮ › “Adicionar à tela inicial”. No iPhone (Safari), toque em Compartilhar › “Adicionar à Tela de Início”.<br>Toque na tela durante a oração para mostrar ou esconder os controles.</p>
+    <button class="primary" id="closeSheet" style="background:transparent;color:var(--gold);border:1px solid var(--line)">Fechar</button>
+  </div>
+</div>
+
+<script>
+/* ---------- Estado salvo ---------- */
+const store = {
+  get(k,d){try{const v=localStorage.getItem("oracao:"+k);return v===null?d:JSON.parse(v)}catch(e){return d}},
+  set(k,v){try{localStorage.setItem("oracao:"+k,JSON.stringify(v))}catch(e){}}
+};
+let state = {
+  custom: store.get("custom",""),
+  speed: store.get("speed",28),
+  size: store.get("size",30),
+  vol: store.get("vol",70),
+  mood: store.get("mood","sereno"),
+  loop: store.get("loop",false),
+  music: store.get("music",true)
+};
+const $ = s => document.querySelector(s);
+const stage=$("#stage"), textEl=$("#text");
+
+function esc(s){return s.replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}
+function render(){
+  if(!state.custom){
+    textEl.innerHTML = `<h1>Minha oração</h1><span style="color:var(--muted)">Toque no botão de ajustes, no canto de cima,\npara digitar sua oração\ne escolher sua música.</span>`;
+  } else {
+    const lines = state.custom.trim().split("\n");
+    const title = lines.shift();
+    let body = esc(lines.join("\n").trim());
+    body = body.replace(/(Amém[.!]?)\s*$/i,'<div class="amen">$1</div>');
+    textEl.innerHTML = `<h1>${esc(title)}</h1>${body}`;
+  }
+  stage.scrollTop = 0; pos = 0; updateProgress();
+}
+
+/* ---------- Rolagem ---------- */
+let playing=false, pendingStart=false, pos=0, last=0, raf=0;
+function maxScroll(){return stage.scrollHeight - stage.clientHeight}
+function tick(t){
+  if(!playing) return;
+  const dt = last ? (t-last)/1000 : 0; last=t;
+  pos += state.speed*dt;
+  if(pos >= maxScroll()){
+    if(state.loop){ pos=0; }
+    else { pos=maxScroll(); stage.scrollTop=pos; finish(); return; }
+  }
+  stage.scrollTop = pos; updateProgress();
+  raf = requestAnimationFrame(tick);
+}
+function updateProgress(){
+  const m=maxScroll(); $("#progress i").style.width = (m>0? Math.min(100,stage.scrollTop/m*100):0)+"%";
+}
+stage.addEventListener("scroll",()=>{ if(!playing){pos=stage.scrollTop;} updateProgress(); },{passive:true});
+
+function wait(ms){return new Promise(r=>setTimeout(r,ms))}
+async function start(){
+  if(!state.custom){ openSheet(); pendingStart=false; return; }
+  if(pos >= maxScroll()-2){ pos=0; stage.scrollTop=0; }
+  setPlayIcon(true);
+  if(state.music) audio.start(pos<5);
+  requestWake();
+  if(pos < 5){
+    const c=$("#count"); c.style.display="grid";
+    for(const n of [3,2,1]){ c.textContent=n; await wait(800); if(!pendingStart){c.style.display="none";return;} }
+    c.style.display="none";
+  }
+  if(!pendingStart) return;
+  playing=true; last=0; raf=requestAnimationFrame(tick);
+  setTimeout(()=>{ if(playing) document.body.classList.add("hide-ui"); }, 2500);
+}
+function pause(){
+  pendingStart=false; playing=false; cancelAnimationFrame(raf); setPlayIcon(false);
+  document.body.classList.remove("hide-ui"); releaseWake(); audio.stop();
+}
+function finish(){
+  pendingStart=false; playing=false; setPlayIcon(false); document.body.classList.remove("hide-ui");
+  audio.fadeOut(6); releaseWake();
+}
+function setPlayIcon(p){ $("#icoPlay").style.display=p?"none":""; $("#icoPause").style.display=p?"":"none"; }
+$("#play").addEventListener("click",e=>{
+  e.stopPropagation();
+  if(playing||pendingStart){ pause(); } else { pendingStart=true; start(); }
+});
+stage.addEventListener("click",()=>{ document.body.classList.toggle("hide-ui"); });
+
+const speedEl=$("#speed");
+function speedLabel(v){return v<18?"Muito lenta":v<34?"Calma":v<55?"Normal":"Rápida"}
+speedEl.value=state.speed; $("#speedVal").textContent=speedLabel(state.speed);
+speedEl.addEventListener("input",()=>{state.speed=+speedEl.value;$("#speedVal").textContent=speedLabel(state.speed);store.set("speed",state.speed)});
+
+/* ---------- Tela ligada ---------- */
+let wake=null;
+async function requestWake(){try{ if("wakeLock" in navigator) wake=await navigator.wakeLock.request("screen"); }catch(e){}}
+function releaseWake(){try{ wake&&wake.release(); wake=null; }catch(e){}}
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible" && playing) requestWake(); });
+
+/* ---------- Guardar a música no aparelho (IndexedDB) ---------- */
+const trackDB = {
+  open(){ return new Promise((res,rej)=>{ const r=indexedDB.open("oracao",1);
+    r.onupgradeneeded=()=>r.result.createObjectStore("files"); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); },
+  async put(blob,name){ const db=await this.open(); return new Promise((res,rej)=>{
+    const tx=db.transaction("files","readwrite"); tx.objectStore("files").put({blob,name},"track");
+    tx.oncomplete=res; tx.onerror=()=>rej(tx.error); }); },
+  async get(){ const db=await this.open(); return new Promise((res,rej)=>{
+    const r=db.transaction("files").objectStore("files").get("track"); r.onsuccess=()=>res(r.result||null); r.onerror=()=>rej(r.error); }); },
+  async del(){ const db=await this.open(); return new Promise(res=>{
+    const tx=db.transaction("files","readwrite"); tx.objectStore("files").delete("track"); tx.oncomplete=res; tx.onerror=res; }); }
+};
+
+/* ---------- Áudio: sua música, ou som ambiente gerado ---------- */
+const MOODS = {
+  sereno:  {name:"Sereno",  chords:[[48,55,64,71],[45,52,60,67],[41,48,57,64],[43,50,59,62]], dur:7, wave:"sine"},
+  celeste: {name:"Celeste", chords:[[50,57,66,73],[47,54,62,69],[43,50,59,66],[45,52,61,64]], dur:9, wave:"triangle"},
+  orgao:   {name:"Órgão suave", chords:[[43,50,59,67],[48,55,64,67],[45,52,60,69],[50,57,62,66]], dur:6, wave:"square"}
+};
+const audio = (()=>{
+  let ctx=null, master=null, filt=null, timer=null, idx=0, on=false;
+  let el=null, elNode=null, trackURL=null, stopT=null;
+  const mtof=m=>440*Math.pow(2,(m-69)/12);
+  function impulse(sec){
+    const len=ctx.sampleRate*sec, b=ctx.createBuffer(2,len,ctx.sampleRate);
+    for(let c=0;c<2;c++){const d=b.getChannelData(c);for(let i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.5)}
+    return b;
+  }
+  function init(){
+    if(ctx) return;
+    ctx=new (window.AudioContext||window.webkitAudioContext)();
+    master=ctx.createGain(); master.gain.value=0; master.connect(ctx.destination);
+    filt=ctx.createBiquadFilter(); filt.type="lowpass"; filt.frequency.value=1400; filt.Q.value=.4;
+    const rev=ctx.createConvolver(); rev.buffer=impulse(5);
+    const dry=ctx.createGain(); dry.gain.value=.45;
+    const wet=ctx.createGain(); wet.gain.value=.75;
+    filt.connect(dry).connect(master); filt.connect(rev).connect(wet).connect(master);
+  }
+  function hookTrack(){
+    // passa a música pelo controle de volume (funciona também no iPhone)
+    if(el && !elNode){ try{ elNode=ctx.createMediaElementSource(el); elNode.connect(master); }catch(e){} }
+  }
+  const hasTrack=()=>!!el;
+  function level(){ const v=state.vol/100; return hasTrack()? v : v*0.22; }
+  function ramp(to,sec){
+    const t=ctx.currentTime; master.gain.cancelScheduledValues(t);
+    master.gain.setValueAtTime(master.gain.value,t); master.gain.linearRampToValueAtTime(to,t+sec);
+  }
+  function playChord(){
+    const m=MOODS[state.mood]||MOODS.sereno, notes=m.chords[idx++%m.chords.length];
+    const t=ctx.currentTime, d=m.dur, att=d*0.4, rel=d*0.7;
+    const all=[...notes, notes[0]-12];
+    all.forEach((n,i)=>{
+      [-4,4].forEach(det=>{
+        const o=ctx.createOscillator(), g=ctx.createGain();
+        o.type=(i===all.length-1)?"sine":m.wave; o.frequency.value=mtof(n); o.detune.value=det;
+        const peak=(m.wave==="square"?0.025:0.07)*(i===all.length-1?1.4:1);
+        g.gain.setValueAtTime(0,t); g.gain.linearRampToValueAtTime(peak,t+att);
+        g.gain.setValueAtTime(peak,t+d); g.gain.linearRampToValueAtTime(0,t+d+rel);
+        o.connect(g).connect(filt); o.start(t); o.stop(t+d+rel+.1);
+      });
+    });
+    timer=setTimeout(playChord, d*1000);
+  }
+  function halt(){ clearTimeout(timer); clearTimeout(stopT); }
+  return {
+    setTrack(blob){
+      this.stop(true);
+      if(el){ try{el.pause()}catch(e){} }
+      if(trackURL) URL.revokeObjectURL(trackURL);
+      el=null; elNode=null; trackURL=null;
+      if(!blob) return;
+      trackURL=URL.createObjectURL(blob);
+      el=new Audio(); el.src=trackURL; el.loop=true; el.preload="auto"; el.setAttribute("playsinline","");
+    },
+    start(fromTop){
+      try{ init(); ctx.resume(); }catch(e){ return; }
+      clearTimeout(stopT);
+      if(hasTrack()){
+        hookTrack();
+        if(fromTop && !on){ try{ el.currentTime=0; }catch(e){} }
+        const p=el.play(); if(p&&p.catch) p.catch(()=>{});
+      } else if(!on){ idx=0; playChord(); }
+      on=true; ramp(level(), hasTrack()?2:4);
+    },
+    stop(now){
+      if(!ctx||!on) return; on=false; halt();
+      ramp(0, now?0.05:1.2);
+      stopT=setTimeout(()=>{ if(el) try{el.pause()}catch(e){} }, now?60:1300);
+    },
+    fadeOut(s){
+      if(!ctx||!on) return; on=false; halt(); ramp(0,s);
+      stopT=setTimeout(()=>{ if(el) try{el.pause()}catch(e){} }, s*1000+100);
+    },
+    setVol(){ if(ctx&&on) ramp(level(),.3); },
+    hasTrack
+  };
+})();
+
+function paintMusicBtn(){ $("#musicBtn").style.opacity = state.music?1:.4; }
+$("#musicBtn").addEventListener("click",e=>{
+  e.stopPropagation();
+  state.music=!state.music; store.set("music",state.music); paintMusicBtn();
+  if(state.music){ if(playing||pendingStart) audio.start(false); } else audio.stop();
+});
+
+/* ---------- Escolher música ---------- */
+function showTrack(name){
+  $("#trackName").textContent = name || "Nenhuma música escolhida";
+  $("#trackName").style.color = name ? "var(--text)" : "var(--muted)";
+  $("#trackRemove").style.display = name ? "" : "none";
+  $("#moodRow").style.display = name ? "none" : "";
+}
+$("#trackFile").addEventListener("change", async e=>{
+  const f=e.target.files && e.target.files[0]; if(!f) return;
+  audio.setTrack(f); showTrack(f.name);
+  try{ await trackDB.put(f, f.name); }
+  catch(err){ $("#trackName").textContent = f.name+" (não foi possível guardar; escolha de novo na próxima vez)"; }
+  e.target.value="";
+});
+$("#trackRemove").addEventListener("click", async ()=>{
+  audio.setTrack(null); showTrack(null);
+  try{ await trackDB.del(); }catch(e){}
+});
+(async()=>{ try{ const t=await trackDB.get(); if(t&&t.blob){ audio.setTrack(t.blob); showTrack(t.name); } }catch(e){} })();
+
+/* ---------- Ajustes ---------- */
+function chips(el, items, current, onPick){
+  el.innerHTML="";
+  Object.entries(items).forEach(([k,label])=>{
+    const b=document.createElement("button"); b.className="chip"+(k===current?" on":""); b.textContent=label;
+    b.onclick=()=>{ onPick(k); [...el.children].forEach(c=>c.classList.remove("on")); b.classList.add("on"); };
+    el.appendChild(b);
+  });
+}
+function openSheet(){
+  pause();
+  const moodNames={}; Object.entries(MOODS).forEach(([k,v])=>moodNames[k]=v.name);
+  chips($("#moodChips"), moodNames, state.mood, k=>{state.mood=k;store.set("mood",k);});
+  $("#custom").value=state.custom; $("#size").value=state.size; $("#vol").value=state.vol; $("#loop").checked=state.loop;
+  $("#sheet").classList.add("open");
+}
+$("#settingsBtn").addEventListener("click",e=>{e.stopPropagation();openSheet();});
+$("#closeSheet").onclick=()=>$("#sheet").classList.remove("open");
+$("#sheet").addEventListener("click",e=>{ if(e.target.id==="sheet") $("#sheet").classList.remove("open"); });
+$("#size").addEventListener("input",e=>{state.size=+e.target.value;store.set("size",state.size);applySize();});
+$("#vol").addEventListener("input",e=>{state.vol=+e.target.value;store.set("vol",state.vol);audio.setVol();});
+$("#loop").addEventListener("change",e=>{state.loop=e.target.checked;store.set("loop",state.loop);});
+$("#saveCustom").onclick=()=>{
+  state.custom=$("#custom").value.trim(); store.set("custom",state.custom); render();
+  $("#sheet").classList.remove("open");
+};
+function applySize(){document.documentElement.style.setProperty("--size",state.size+"px")}
+
+applySize(); paintMusicBtn(); render();
+if(!state.custom) setTimeout(openSheet, 400);
+
+/* ---------- Instalável / funciona offline ---------- */
+if("serviceWorker" in navigator){ window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{})); }
+</script>
+</body>
+</html>
