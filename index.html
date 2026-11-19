@@ -14,12 +14,12 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Merriweather:ital,wght@0,400;0,700;1,400&family=Cormorant+Garamond:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root{
     --bg1:#120d1f; --bg2:#2a1b3d; --gold:#e8c88a; --text:#f4ede1; --muted:#b7a9c9;
     --panel:rgba(20,14,32,.82); --line:rgba(232,200,138,.22);
-    --size:30px;
+    --size:30px; --font:"Atkinson Hyperlegible",Verdana,sans-serif; --lh:1.6; --weight:400;
   }
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{margin:0;height:100%;overflow:hidden;background:var(--bg1);color:var(--text);
@@ -35,7 +35,7 @@
             mask-image:linear-gradient(transparent 0, #000 22%, #000 70%, transparent 100%)}
   #stage::-webkit-scrollbar{display:none}
   #text{max-width:720px;margin:0 auto;padding:55vh 28px 75vh;
-    font-family:"Cormorant Garamond",Georgia,serif;font-size:var(--size);line-height:1.55;
+    font-family:var(--font);font-size:var(--size);line-height:var(--lh);font-weight:var(--weight);color:#fffaf0;
     text-align:center;white-space:pre-wrap}
   #text h1{font-weight:500;font-size:1.25em;color:var(--gold);letter-spacing:.02em;margin:0 0 1.2em}
   #text .amen{color:var(--gold);font-style:italic;margin-top:1.4em}
@@ -61,6 +61,8 @@
   .grow{flex:1;min-width:0}
   .lbl{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:6px}
   input[type=range]{width:100%;accent-color:var(--gold)}
+  #time{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-top:6px;font-variant-numeric:tabular-nums}
+  #time b{color:var(--gold);font-weight:500}
   #progress{height:3px;background:rgba(255,255,255,.08);border-radius:3px;margin-top:10px;overflow:hidden}
   #progress i{display:block;height:100%;width:0;background:var(--gold)}
   .hide-ui header,.hide-ui footer{opacity:0;pointer-events:none}
@@ -121,6 +123,7 @@
       <div class="lbl"><span>Velocidade</span><span id="speedVal">Calma</span></div>
       <input type="range" id="speed" min="8" max="80" value="28">
       <div id="progress"><i></i></div>
+      <div id="time"><span id="tLeft">Falta 0:00</span><span>Duração <b id="tTotal">0:00</b></span></div>
     </div>
   </div>
 </footer>
@@ -142,6 +145,10 @@
       </div>
       <input type="file" id="trackFile" accept="audio/*" hidden>
       <p class="hint" style="margin:8px 0 0">MP3, M4A, WAV… A música fica guardada só neste aparelho e toca em repetição.</p>
+    </div>
+    <div class="row">
+      <label>Letra</label>
+      <div class="chips" id="fontChips"></div>
     </div>
     <div class="row">
       <label>Tamanho do texto</label>
@@ -176,6 +183,7 @@ let state = {
   size: store.get("size",30),
   vol: store.get("vol",70),
   mood: store.get("mood","sereno"),
+  font: store.get("font","clara"),
   loop: store.get("loop",false),
   music: store.get("music",true)
 };
@@ -210,7 +218,15 @@ function tick(t){
   stage.scrollTop = pos; updateProgress();
   raf = requestAnimationFrame(tick);
 }
+function fmt(sec){sec=Math.max(0,Math.round(sec));const m=Math.floor(sec/60),s=sec%60;return m+":"+String(s).padStart(2,"0")}
+function updateTime(){
+  const m=maxScroll(), sp=state.speed||1;
+  $("#tTotal").textContent=fmt(m/sp);
+  $("#tLeft").textContent="Falta "+fmt((m-stage.scrollTop)/sp);
+}
+window.addEventListener("resize",updateTime);
 function updateProgress(){
+  updateTime();
   const m=maxScroll(); $("#progress i").style.width = (m>0? Math.min(100,stage.scrollTop/m*100):0)+"%";
 }
 stage.addEventListener("scroll",()=>{ if(!playing){pos=stage.scrollTop;} updateProgress(); },{passive:true});
@@ -249,7 +265,7 @@ stage.addEventListener("click",()=>{ document.body.classList.toggle("hide-ui"); 
 const speedEl=$("#speed");
 function speedLabel(v){return v<18?"Muito lenta":v<34?"Calma":v<55?"Normal":"Rápida"}
 speedEl.value=state.speed; $("#speedVal").textContent=speedLabel(state.speed);
-speedEl.addEventListener("input",()=>{state.speed=+speedEl.value;$("#speedVal").textContent=speedLabel(state.speed);store.set("speed",state.speed)});
+speedEl.addEventListener("input",()=>{state.speed=+speedEl.value;$("#speedVal").textContent=speedLabel(state.speed);store.set("speed",state.speed);updateTime()});
 
 /* ---------- Tela ligada ---------- */
 let wake=null;
@@ -396,6 +412,8 @@ function openSheet(){
   pause();
   const moodNames={}; Object.entries(MOODS).forEach(([k,v])=>moodNames[k]=v.name);
   chips($("#moodChips"), moodNames, state.mood, k=>{state.mood=k;store.set("mood",k);});
+  const fontNames={}; Object.entries(FONTS).forEach(([k,v])=>fontNames[k]=v.name);
+  chips($("#fontChips"), fontNames, state.font, k=>{state.font=k;store.set("font",k);applyFont();});
   $("#custom").value=state.custom; $("#size").value=state.size; $("#vol").value=state.vol; $("#loop").checked=state.loop;
   $("#sheet").classList.add("open");
 }
@@ -409,9 +427,20 @@ $("#saveCustom").onclick=()=>{
   state.custom=$("#custom").value.trim(); store.set("custom",state.custom); render();
   $("#sheet").classList.remove("open");
 };
-function applySize(){document.documentElement.style.setProperty("--size",state.size+"px")}
+const FONTS = {
+  clara:    {name:"Clara",    css:'"Atkinson Hyperlegible",Verdana,sans-serif', lh:1.6, w:400},
+  livro:    {name:"Livro",    css:'Merriweather,Georgia,serif', lh:1.75, w:400},
+  elegante: {name:"Elegante", css:'"Cormorant Garamond",Georgia,serif', lh:1.55, w:500}
+};
+function applyFont(){
+  const f=FONTS[state.font]||FONTS.clara, r=document.documentElement.style;
+  r.setProperty("--font",f.css); r.setProperty("--lh",f.lh); r.setProperty("--weight",f.w);
+  requestAnimationFrame(updateTime);
+}
+function applySize(){document.documentElement.style.setProperty("--size",state.size+"px");requestAnimationFrame(updateTime)}
 
-applySize(); paintMusicBtn(); render();
+applyFont(); applySize(); paintMusicBtn(); render();
+try{document.fonts.ready.then(updateTime)}catch(e){}
 if(!state.custom) setTimeout(openSheet, 400);
 
 /* ---------- Instalável / funciona offline ---------- */
